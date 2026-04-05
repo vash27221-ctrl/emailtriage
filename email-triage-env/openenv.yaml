@@ -1,0 +1,86 @@
+---
+# OpenEnv Specification for Email Triage Environment
+name: email-triage-env
+version: 1.0.0
+description: Real-world email triage environment for training RL agents
+
+author: OpenEnv Contributors
+license: MIT
+
+environment:
+  id: EmailTriage-v1
+  entry_point: email_triage.environment:EmailTriageEnv
+  max_episode_steps: null
+  reward_threshold: 0.8
+
+tasks:
+  - id: task_1_easy
+    name: Spam Detection
+    description: Binary classification of obvious spam vs legitimate emails
+    difficulty: easy
+    num_episodes: 1
+    reward_threshold: 0.9
+    
+  - id: task_2_medium
+    name: Multi-Category Classification
+    description: 4-way classification with mixed signals
+    difficulty: medium
+    num_episodes: 1
+    reward_threshold: 0.75
+    
+  - id: task_3_hard
+    name: Edge Cases & Ambiguity
+    description: Complex classification requiring deep understanding
+    difficulty: hard
+    num_episodes: 1
+    reward_threshold: 0.6
+
+observation_spec:
+  name: Observation
+  type: pydantic
+  model: email_triage.models.Observation
+  description: Current observation including email and progress metrics
+
+action_spec:
+  name: Action
+  type: pydantic
+  model: email_triage.models.Action
+  description: Agent action (classify email into category)
+
+reward_spec:
+  name: Reward
+  type: pydantic
+  model: email_triage.models.Reward
+  description: Reward signal with partial progress and accuracy metrics
+
+state_spec:
+  name: StateSnapshot
+  type: pydantic
+  model: email_triage.models.StateSnapshot
+  description: Complete state snapshot for saving/loading
+
+implementation:
+  language: python
+  version: "3.10+"
+  dependencies:
+    - pydantic>=2.0
+    - openai>=1.0
+  
+  methods:
+    reset:
+      description: Reset environment and return initial observation
+      returns: Observation
+    
+    step:
+      description: Execute action and return observation, reward, done, info
+      parameters:
+        - action: Action
+      returns:
+        - observation: Observation
+        - reward: Reward
+        - done: bool
+        - info: dict
+    
+    state:
+      description: Get complete state snapshot
+      returns: StateSnapshot
