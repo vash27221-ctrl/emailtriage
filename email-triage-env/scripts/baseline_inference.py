@@ -1,139 +1,163 @@
-"""Baseline inference script using OpenAI API."""
+"""Baseline inference script using Groq API."""
 
 import os
 import json
 import sys
+import time
 from typing import Dict, Any
 from pathlib import Path
 
-# Load environment variables from .env file
+# Ensure email_triage package is importable
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Load environment variables - check workspace root first, then parent
+_env_path = Path(__file__).parent.parent.parent / ".env"
+if not _env_path.exists():
+    _env_path = Path(__file__).parent.parent / ".env"
+
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(_env_path)
 
 from email_triage.environment import EmailTriageEnv
 from email_triage.models import Action, ActionType, EmailCategory
 
 try:
-    from openai import OpenAI
+    from groq import Groq
 except ImportError:
-    print("Error: openai package not installed. Run: pip install openai")
+    print("Error: groq package not installed. Run: pip install groq")
     sys.exit(1)
 
 
 def load_api_key() -> str:
-    """Load OpenAI API key from environment (.env or environment variables)."""
-    api_key = os.getenv("OPENAI_API_KEY")
+    """Load Groq API key from environment (.env or environment variables)."""
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError(
-            "OPENAI_API_KEY environment variable not set. "
-            "Please set it before running: export OPENAI_API_KEY='your-key'"
+            "GROQ_API_KEY environment variable not set. "
+            "Please set it in your .env file or export GROQ_API_KEY='your-key'"
         )
     return api_key
 
 
-def classify_email_with_gpt(
-    client: OpenAI,
+def classify_email_with_groq(
+    client: Groq,
     sender: str,
     subject: str,
     preview: str,
     is_reply: bool,
     has_attachment: bool,
     task_id: str,
+    max_retries: int = 5,
 ) -> EmailCategory:
     """
-    Use GPT to classify an email.
-    
+    Use Groq to classify an email with retry logic for rate limiting.
+
     Args:
-        client: OpenAI client
+        client: Groq client
         sender: Email sender address
         subject: Email subject line
         preview: Email body preview
         is_reply: Whether this is a reply
         has_attachment: Whether email has attachments
         task_id: Task ID for context
-    
+        max_retries: Maximum number of retries on rate limit
+
     Returns:
         Predicted email category
     """
-    
-    # Build task-specific prompt
-    task_prompts = {
-        "task_1_easy": """You are an email classification AI. Your task is to identify SPAM emails.
-Return ONLY ONE category: spam or urgent/follow_up/informational (for legitimate emails).
-Obvious spam has: phishing attempts, generic offers, all-caps headers, suspicious domains.""",
-        
-        "task_2_medium": """Classify this email into ONE of these categories:
-- urgent: CRITICAL, ALERT, immediate action, production issues, security incidents
-- follow_up: Requires response, asks for decision, awaiting input, is a reply needing action
-- informational: Announcements, newsletters, updates, FYI content - no action needed
-- spam: Phishing, suspicious, obviously spam
-Pick the MOST appropriate category.""",
-        
-        "task_3_hard": """You are an expert email classifier. Analyze context carefully.
-Categories:
-- urgent: Time-sensitive, security/production issues, needs immediate action
-- follow_up: Person waiting for your response/decision
-- informational: Educational, announcements, no response needed
-- spam: Phishing or obviously unwanted
 
-These can be VERY similar. Read the FULL context. Return ONLY the category name.""",
+    task_prompts = {
+        "task_1_easy": (
+            "You are an email classification AI. Your task is to identify SPAM emails.\n"
+            "Return ONLY ONE category: spam or urgent/follow_up/informational (for legitimate emails).\n"
+            "Obvious spam has: phishing attempts, generic offers, all-caps headers, suspicious domains."
+        ),
+        "task_2_medium": (
+            "Classify this email into ONE of these categories:\n"
+            "- urgent: CRITICAL, ALERT, immediate action, production issues, security incidents\n"
+            "- follow_up: Requires response, asks for decision, awaiting input, is a reply needing action\n"
+            "- informational: Announcements, newsletters, updates, FYI content - no action needed\n"
+            "- spam: Phishing, suspicious, obviously spam\n"
+            "Pick the MOST appropriate category."
+        ),
+        "task_3_hard": (
+            "You are an expert email classifier. Analyze context carefully.\n"
+            "Categories:\n"
+            "- urgent: Time-sensitive, security/production issues, needs immediate action\n"
+            "- follow_up: Person waiting for your response/decision\n"
+            "- informational: Educational, announcements, no response needed\n"
+            "- spam: Phishing or obviously unwanted\n\n"
+            "These can be VERY similar. Read the FULL context. Return ONLY the category name."
+        ),
     }
-    
+
     task_prompt = task_prompts.get(
         task_id,
         "Classify this email into: spam, urgent, follow_up, or informational"
     )
-    
-    user_message = f"""Email to classify:
-From: {sender}
-Subject: {subject}
-Preview: {preview}
-Is Reply: {is_reply}
-Has Attachment: {has_attachment}
 
-{task_prompt}
-
-Response (ONLY the category name): """
-    
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        max_tokens=50,
-        messages=[
-            {"role": "user", "content": user_message}
-        ]
+    user_message = (
+        f"Email to classify:\n"
+        f"From: {sender}\n"
+        f"Subject: {subject}\n"
+        f"Preview: {preview}\n"
+        f"Is Reply: {is_reply}\n"
+        f"Has Attachment: {has_attachment}\n\n"
+        f"{task_prompt}\n\n"
+        f"Response (ONLY the category name): "
     )
-    
-    # Parse response
-    response_text = response.choices[0].message.content.strip().lower()
-    
-    # Extract category
-    for category in EmailCategory:
-        if category.value.lower() in response_text.lower():
-            return category
-    
-    # Default to informational if unclear
+
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": user_message}],
+                max_tokens=10,
+                temperature=0.0,
+            )
+
+            response_text = response.choices[0].message.content.strip().lower()
+
+            for category in EmailCategory:
+                if category.value.lower() in response_text:
+                    return category
+
+            return EmailCategory.INFORMATIONAL
+
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate" in error_str.lower():
+                if attempt < max_retries - 1:
+                    retry_delay = 30 * (2 ** attempt)
+                    print(f"  ⏳ Rate limited. Retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    raise
+            else:
+                raise
+
     return EmailCategory.INFORMATIONAL
 
 
 def run_baseline(task_id: str = "task_1_easy", verbose: bool = True) -> Dict[str, Any]:
     """
     Run baseline inference on a task.
-    
+
     Args:
         task_id: Task to run (task_1_easy, task_2_medium, task_3_hard)
         verbose: Print detailed output
-    
+
     Returns:
         Performance metrics and scores
     """
-    
-    # Initialize
+
     api_key = load_api_key()
-    client = OpenAI(api_key=api_key)
-    
+    client = Groq(api_key=api_key)
+
     env = EmailTriageEnv(task_id=task_id)
     observation = env.reset()
-    
+
     if verbose:
         print(f"\n{'='*60}")
         print(f"Running Baseline on {task_id}")
@@ -141,18 +165,17 @@ def run_baseline(task_id: str = "task_1_easy", verbose: bool = True) -> Dict[str
         print(f"Task: {env.task.description}")
         print(f"Difficulty: {env.task.difficulty}")
         print(f"Total emails: {observation.total_count}\n")
-    
+
     done = False
     step = 0
     results = []
-    
+
     while not done:
         step += 1
         current_email = observation.current_email
-        
+
         try:
-            # Get classification from GPT
-            predicted_category = classify_email_with_gpt(
+            predicted_category = classify_email_with_groq(
                 client=client,
                 sender=current_email.sender,
                 subject=current_email.subject,
@@ -161,17 +184,15 @@ def run_baseline(task_id: str = "task_1_easy", verbose: bool = True) -> Dict[str
                 has_attachment=current_email.has_attachment,
                 task_id=task_id,
             )
-            
-            # Take action
+
             action = Action(
                 action_type=ActionType.CLASSIFY,
                 category=predicted_category,
-                reason="GPT classification"
+                reason="Groq classification"
             )
-            
+
             observation, reward, done, info = env.step(action)
-            
-            # Record result
+
             is_correct = current_email.ground_truth_category == predicted_category
             results.append({
                 "step": step,
@@ -181,55 +202,54 @@ def run_baseline(task_id: str = "task_1_easy", verbose: bool = True) -> Dict[str
                 "correct": is_correct,
                 "reward": reward.step_reward,
             })
-            
+
             if verbose:
                 status = "✓" if is_correct else "✗"
                 print(
                     f"{status} Step {step}: {current_email.subject[:50]:50s} "
                     f"→ {predicted_category:12s} (acc: {reward.accuracy:.2%})"
                 )
-        
+
         except Exception as e:
             print(f"Error processing email {current_email.id}: {e}")
             done = True
             break
-    
-    # Calculate final metrics
+
     state = env.state()
     final_grade = env.task.grade()
-    accuracy = state.total_correct / (state.total_correct + state.total_wrong) \
-        if (state.total_correct + state.total_wrong) > 0 else 0.0
-    
+    total = state.total_correct + state.total_wrong
+    accuracy = state.total_correct / total if total > 0 else 0.0
+
     metrics = {
         "task_id": task_id,
         "difficulty": env.task.difficulty,
-        "total_emails": state.total_correct + state.total_wrong,
+        "total_emails": total,
         "correct": state.total_correct,
         "wrong": state.total_wrong,
         "accuracy": accuracy,
         "final_grade": final_grade,
         "results": results,
     }
-    
+
     if verbose:
         print(f"\n{'='*60}")
         print(f"Results for {task_id}")
         print(f"{'='*60}")
-        print(f"Accuracy: {accuracy:.2%} ({state.total_correct}/{state.total_correct + state.total_wrong})")
+        print(f"Accuracy: {accuracy:.2%} ({state.total_correct}/{total})")
         print(f"Final Grade: {final_grade:.2f}/1.0")
         print(f"{'='*60}\n")
-    
+
     return metrics
 
 
 def main():
     """Run baseline on all tasks."""
-    
-    print("Email Triage Baseline Inference")
-    print("================================\n")
-    
+
+    print("Email Triage Baseline Inference (Groq)")
+    print("=======================================\n")
+
     all_results = {}
-    
+
     for task_id in ["task_1_easy", "task_2_medium", "task_3_hard"]:
         try:
             metrics = run_baseline(task_id=task_id, verbose=True)
@@ -237,15 +257,14 @@ def main():
         except Exception as e:
             print(f"Failed to run {task_id}: {e}\n")
             all_results[task_id] = {"error": str(e)}
-    
-    # Summary
+
     print("\n" + "="*60)
     print("FINAL SUMMARY")
     print("="*60)
-    
+
     total_grade = 0.0
     count = 0
-    
+
     for task_id, metrics in all_results.items():
         if "error" not in metrics:
             grade = metrics.get("final_grade", 0.0)
@@ -256,20 +275,19 @@ def main():
             )
             total_grade += grade
             count += 1
-    
+
     if count > 0:
         avg_grade = total_grade / count
         print("-" * 60)
         print(f"Average Grade: {avg_grade:.2f}/1.0")
-    
+
     print("="*60 + "\n")
-    
-    # Save results
+
     with open("baseline_results.json", "w") as f:
         json.dump(all_results, f, indent=2, default=str)
-    
+
     print("✓ Results saved to baseline_results.json")
-    
+
     return all_results
 
 
