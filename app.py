@@ -1,78 +1,181 @@
 """
-HF Spaces entry point — runs a minimal HTTP server that:
-1. Keeps the container alive (required by HF Spaces)
-2. Runs inference on GET /run and streams the output
-3. Returns health check on GET /
+FastAPI server exposing OpenEnv REST API for Email Triage environment.
+
+Endpoints expected by the OpenEnv validator:
+  POST /reset          -> resets environment, returns observation
+  POST /step           -> takes action, returns (obs, reward, done, info)
+  GET  /state          -> returns current state snapshot
+  GET  /health         -> health check
 """
 
 import os
 import sys
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from io import StringIO
 from pathlib import Path
+from typing import Any, Dict, Optional
 
-# Make email_triage importable
 sys.path.insert(0, str(Path(__file__).parent / "email-triage-env"))
 
-import inference
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent / ".env")
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from email_triage.environment import EmailTriageEnv
+from email_triage.models import Action, ActionType, EmailCategory
+
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
+
+app = FastAPI(
+    title="Email Triage OpenEnv",
+    description="Hybrid RL+LLM email classification environment",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Global environment instance (one per server process)
+_env: Optional[EmailTriageEnv] = None
+_current_task_id: str = "task_1_easy"
+
+# ---------------------------------------------------------------------------
+# Request / Response models
+# ---------------------------------------------------------------------------
+
+class ResetRequest(BaseModel):
+    task_id: Optional[str] = "task_1_easy"
+
+class StepRequest(BaseModel):
+    action: str          # e.g. "classify('spam')"
+    category: Optional[str] = None   # direct category override
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def parse_category(action_str: str) -> EmailCategory:
+    """Extract EmailCategory from action string like classify('spam')."""
+    action_str = action_str.lower()
+    for cat in EmailCategory:
+        if cat.value in action_str:
+            return cat
+    return EmailCategory.INFORMATIONAL
+
+def obs_to_dict(obs) -> Dict[str, Any]:
+    email = obs.current_email
+    return {
+        "current_email": {
+            "id": email.id,
+            "sender": email.sender,
+            "subject": email.subject,
+            "preview": email.preview,
+            "received_time": email.received_time,
+            "is_reply": email.is_reply,
+            "has_attachment": email.has_attachment,
+        },
+        "processed_count": obs.processed_count,
+        "total_count": obs.total_count,
+        "correct_classifications": obs.correct_classifications,
+        "task_id": obs.task_id,
+        "hint": obs.hint,
+    }
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/health")
+def health():
+    return {"status": "healthy", "service": "email-triage-env"}
 
 
-def run_all_tasks() -> str:
-    """Run inference on all tasks and capture output."""
-    old_stdout = sys.stdout
-    sys.stdout = buffer = StringIO()
-
-    try:
-        for task_id in ["task_1_easy", "task_2_medium", "task_3_hard"]:
-            agent = inference.HybridAgent()
-            inference.run_task(task_id=task_id, agent=agent, episodes=200)
-    finally:
-        sys.stdout = old_stdout
-
-    return buffer.getvalue()
-
-
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        pass  # suppress default access logs
-
-    def do_GET(self):
-        if self.path == "/":
-            body = b"Email Triage Env - Running. GET /run to execute inference."
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        elif self.path == "/run":
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            output = run_all_tasks()
-            self.wfile.write(output.encode())
-
-        else:
-            self.send_response(404)
-            self.end_headers()
+@app.post("/reset")
+def reset(request: ResetRequest = None):
+    global _env, _current_task_id
+    task_id = (request.task_id if request and request.task_id else "task_1_easy")
+    _current_task_id = task_id
+    _env = EmailTriageEnv(task_id=task_id)
+    obs = _env.reset()
+    return {
+        "observation": obs_to_dict(obs),
+        "task_id": task_id,
+        "status": "reset_ok",
+    }
 
 
-def run_inference_background():
-    """Run inference once at startup and print to container logs."""
-    print("===== Application Startup at", __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "=====", flush=True)
-    for task_id in ["task_1_easy", "task_2_medium", "task_3_hard"]:
-        agent = inference.HybridAgent()
-        inference.run_task(task_id=task_id, agent=agent, episodes=200)
+@app.post("/step")
+def step(request: StepRequest):
+    global _env
+    if _env is None:
+        raise HTTPException(status_code=400, detail="Environment not initialized. Call /reset first.")
 
+    # Parse category from action string or direct field
+    if request.category:
+        try:
+            category = EmailCategory(request.category.lower())
+        except ValueError:
+            category = parse_category(request.category)
+    else:
+        category = parse_category(request.action)
+
+    action = Action(
+        action_type=ActionType.CLASSIFY,
+        category=category,
+        reason=request.action,
+    )
+
+    obs, reward, done, info = _env.step(action)
+
+    return {
+        "observation": obs_to_dict(obs),
+        "reward": reward.step_reward,
+        "done": done,
+        "info": {
+            "accuracy": reward.accuracy,
+            "cumulative_reward": reward.cumulative_reward,
+            **{k: str(v) for k, v in info.items()},
+        },
+    }
+
+
+@app.get("/state")
+def state():
+    global _env
+    if _env is None:
+        raise HTTPException(status_code=400, detail="Environment not initialized. Call /reset first.")
+    s = _env.state()
+    return {
+        "task_id": s.task_id,
+        "episode_step": s.episode_step,
+        "current_email_id": s.current_email_id,
+        "total_correct": s.total_correct,
+        "total_wrong": s.total_wrong,
+        "cumulative_reward": s.cumulative_reward,
+    }
+
+
+@app.get("/")
+def root():
+    return {
+        "service": "email-triage-env",
+        "status": "running",
+        "endpoints": ["/health", "/reset", "/step", "/state"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Run inference in background thread so server starts immediately
-    t = threading.Thread(target=run_inference_background, daemon=True)
-    t.start()
-
-    # Keep container alive with HTTP server on port 7860
+    import uvicorn
     port = int(os.getenv("PORT", 7860))
-    server = HTTPServer(("0.0.0.0", port), Handler)
-    print(f"Server running on port {port}", flush=True)
-    server.serve_forever()
+    uvicorn.run(app, host="0.0.0.0", port=port)
