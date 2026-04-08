@@ -27,7 +27,8 @@ setup(
     python_requires=">=3.10",
     install_requires=[
         "pydantic>=2.0.0",
-        "openai>=1.0.0",
+        "groq>=0.9.0",
+        "python-dotenv>=0.21.0",
     ],
     extras_require={
         "dev": [

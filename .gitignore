@@ -1,1 +1,23 @@
+# Environment
 .env
+.venv/
+email-triage-env/.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Generated artifacts
+baseline_results.json
+rl_qtable*.json
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/

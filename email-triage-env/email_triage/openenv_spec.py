@@ -134,7 +134,8 @@ OPENENV_SPEC = {
         "version": "3.10+",
         "dependencies": [
             "pydantic>=2.0",
-            "openai>=1.0",  # for baseline
+            "groq>=0.9.0",
+            "python-dotenv>=0.21.0",
         ],
         "methods": {
             "reset": {

@@ -58,6 +58,16 @@ class EasySpamDetectionTask(Task):
             "Please review the attached budget proposal for the upcoming quarter...",
             "I've created a pull request that needs your review before merging...",
         ]
+
+        # Fixed ground truth labels — consistent across episodes so the agent can learn
+        legitimate_categories = [
+            EmailCategory.INFORMATIONAL,  # Q1 status update — FYI report
+            EmailCategory.INFORMATIONAL,  # Team lunch — announcement
+            EmailCategory.FOLLOW_UP,      # Customer request — needs response
+            EmailCategory.INFORMATIONAL,  # Meeting notes — FYI
+            EmailCategory.FOLLOW_UP,      # Budget review — needs approval
+            EmailCategory.FOLLOW_UP,      # Code review — needs your review
+        ]
         
         base_time = datetime.now()
         idx = 0
@@ -86,11 +96,7 @@ class EasySpamDetectionTask(Task):
                 received_time=(base_time - timedelta(hours=5+i)).isoformat() + "Z",
                 is_reply=random.choice([True, False]),
                 has_attachment=random.choice([True, False]),
-                ground_truth_category=random.choice([
-                    EmailCategory.URGENT,
-                    EmailCategory.INFORMATIONAL,
-                    EmailCategory.FOLLOW_UP
-                ])
+                ground_truth_category=legitimate_categories[i]
             ))
             idx += 1
         
