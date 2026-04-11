@@ -306,12 +306,12 @@ def run_task(task_id: str, agent: HybridAgent, episodes: int = 200):
         success    = False
         print(
             f"[STEP] step={step_num} action=null "
-            f"reward=0.00 done=true error={e}",
+            f"reward=0.01 done=true error={e}",
             flush=True
         )
 
     # [END] always emitted
-    rewards_str = ",".join(f"{r:.2f}" for r in step_rewards) if step_rewards else "0.00"
+    rewards_str = ",".join(f"{r:.2f}" for r in step_rewards) if step_rewards else "0.01"
     print(
         f"[END] success={'true' if success else 'false'} "
         f"steps={step_num} rewards={rewards_str}",

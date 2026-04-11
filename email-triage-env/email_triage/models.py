@@ -107,18 +107,18 @@ class Observation(BaseModel):
 class Reward(BaseModel):
     """Reward signal model."""
     step_reward: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Reward for this step (0.0-1.0)"
+        gt=0.0,
+        lt=1.0,
+        description="Reward for this step (exclusive 0-1)"
     )
     cumulative_reward: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Cumulative episode reward (0.0-1.0)"
+        gt=0.0,
+        lt=1.0,
+        description="Cumulative episode reward (exclusive 0-1)"
     )
     accuracy: float = Field(
-        ge=0.0,
-        le=1.0,
+        gt=0.0,
+        lt=1.0,
         description="Current accuracy on correctly classified emails"
     )
     bonus: float = Field(
@@ -135,7 +135,7 @@ class Reward(BaseModel):
             "example": {
                 "step_reward": 0.25,
                 "cumulative_reward": 0.25,
-                "accuracy": 1.0,
+                "accuracy": 0.25,
                 "bonus": 0.0,
                 "penalty": 0.0
             }
@@ -153,8 +153,8 @@ class StateSnapshot(BaseModel):
     total_correct: int = Field(description="Total correct classifications")
     total_wrong: int = Field(description="Total wrong classifications")
     cumulative_reward: float = Field(
-        ge=0.0,
-        le=1.0,
+        gt=0.0,
+        lt=1.0,
         description="Cumulative reward so far"
     )
 
