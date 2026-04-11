@@ -129,9 +129,9 @@ class EmailTriageEnv:
             observation = self.task._get_observation()
             done = False
             reward = Reward(
-                step_reward=0.0,
-                cumulative_reward=self.task.correct_count / max(self.task.total_processed, 1),
-                accuracy=self.task.correct_count / max(self.task.total_processed, 1),
+                step_reward=0.01,
+                cumulative_reward=max(0.01, min(0.99, self.task.correct_count / max(self.task.total_processed, 1))),
+                accuracy=max(0.01, min(0.99, self.task.correct_count / max(self.task.total_processed, 1))),
             )
         
         info = {
@@ -157,7 +157,7 @@ class EmailTriageEnv:
             emails_processed=self._history,
             total_correct=self.task.correct_count,
             total_wrong=self.task.total_processed - self.task.correct_count,
-            cumulative_reward=self.task.correct_count / max(self.task.total_processed, 1),
+            cumulative_reward=max(0.01, min(0.99, self.task.correct_count / max(self.task.total_processed, 1))),
         )
 
     def get_task_info(self) -> Dict[str, Any]:
