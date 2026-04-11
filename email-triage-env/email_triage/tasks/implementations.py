@@ -123,21 +123,21 @@ class EasySpamDetectionTask(Task):
     def grade(self) -> float:
         """
         Grading: 
-        - 90%+ accuracy: 1.0
+        - 90%+ accuracy: 0.99
         - 70-89%: 0.6
-        - Below 70%: 0.0 (failure)
+        - Below 70%: 0.01 (failure)
         """
         if self.total_processed == 0:
-            return 0.0
+            return 0.01
         
         accuracy = self.correct_count / self.total_processed
         
         if accuracy >= 0.90:
-            return 1.0
+            return 0.99
         elif accuracy >= 0.70:
             return 0.6
         else:
-            return 0.0
+            return 0.01
 
 
 class MediumMultiClassificationTask(Task):
@@ -259,18 +259,18 @@ class MediumMultiClassificationTask(Task):
     def grade(self) -> float:
         """
         Grading:
-        - 85%+ accuracy: 1.0
+        - 85%+ accuracy: 0.99
         - 70-84%: 0.75
         - 60-69%: 0.5
         - Below 60%: 0.25
         """
         if self.total_processed == 0:
-            return 0.0
+            return 0.01
         
         accuracy = self.correct_count / self.total_processed
         
         if accuracy >= 0.85:
-            return 1.0
+            return 0.99
         elif accuracy >= 0.70:
             return 0.75
         elif accuracy >= 0.60:
@@ -353,19 +353,19 @@ class HardEdgeCaseTask(Task):
     def grade(self) -> float:
         """
         Strict grading with bonus:
-        - 90%+ accuracy: 1.0 (excellent)
+        - 90%+ accuracy: 0.99 (excellent)
         - 80-89%: 0.8
         - 70-79%: 0.6
         - 60-69%: 0.3
-        - Below 60%: 0.0
+        - Below 60%: 0.01
         """
         if self.total_processed == 0:
-            return 0.0
+            return 0.01
         
         accuracy = self.correct_count / self.total_processed
         
         if accuracy >= 0.90:
-            return 1.0
+            return 0.99
         elif accuracy >= 0.80:
             return 0.8
         elif accuracy >= 0.70:
@@ -373,4 +373,4 @@ class HardEdgeCaseTask(Task):
         elif accuracy >= 0.60:
             return 0.3
         else:
-            return 0.0
+            return 0.01
