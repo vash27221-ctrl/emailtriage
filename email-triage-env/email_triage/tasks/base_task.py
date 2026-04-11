@@ -86,9 +86,10 @@ class Task(ABC):
 
     def _calculate_reward(self, is_correct: bool) -> Reward:
         """Calculate reward for this step."""
-        step_reward = 1.0 if is_correct else 0.0
-        cumulative = self.correct_count / self.total_processed if self.total_processed > 0 else 0.0
-        
+        step_reward = 0.99 if is_correct else 0.01
+        cumulative = self.correct_count / self.total_processed if self.total_processed > 0 else 0.01
+        cumulative = max(0.01, min(0.99, cumulative))
+
         return Reward(
             step_reward=step_reward,
             cumulative_reward=cumulative,
@@ -122,7 +123,8 @@ class Task(ABC):
 
     def get_performance_metrics(self) -> dict:
         """Return detailed performance metrics."""
-        accuracy = self.correct_count / self.total_processed if self.total_processed > 0 else 0.0
+        accuracy = self.correct_count / self.total_processed if self.total_processed > 0 else 0.01
+        accuracy = max(0.01, min(0.99, accuracy))
         return {
             "accuracy": accuracy,
             "correct": self.correct_count,

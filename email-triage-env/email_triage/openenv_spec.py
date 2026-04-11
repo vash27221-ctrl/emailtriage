@@ -105,17 +105,17 @@ OPENENV_SPEC = {
         "fields": {
             "step_reward": {
                 "type": "float",
-                "range": [0.0, 1.0],
+                "range": [0.01, 0.99],
                 "description": "Reward for current step"
             },
             "cumulative_reward": {
                 "type": "float",
-                "range": [0.0, 1.0],
+                "range": [0.01, 0.99],
                 "description": "Cumulative episode reward (accuracy)"
             },
             "accuracy": {
                 "type": "float",
-                "range": [0.0, 1.0],
+                "range": [0.01, 0.99],
                 "description": "Current accuracy"
             },
             "bonus": {
