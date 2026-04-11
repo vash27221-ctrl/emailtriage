@@ -336,4 +336,4 @@ if __name__ == "__main__":
 
     for task_id in task_ids:
         agent = HybridAgent()
-        run_task(task_id=task_id, agent=agent, episodes=200)
+        run_task(task_id=task_id, agent=agent, episodes=50)
