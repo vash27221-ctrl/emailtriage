@@ -300,10 +300,14 @@ def run_task(task_id: str, agent: HybridAgent, episodes: int = 200):
 
         grade   = env.task.grade()
         success = grade >= 0.6
+        # score = mean of step rewards, clamped strictly between 0 and 1
+        score = sum(step_rewards) / len(step_rewards) if step_rewards else 0.01
+        score = max(0.01, min(0.99, score))
 
     except Exception as e:
         last_error = e
         success    = False
+        score      = 0.01
         print(
             f"[STEP] step={step_num} action=null "
             f"reward=0.01 done=true error={e}",
@@ -314,7 +318,7 @@ def run_task(task_id: str, agent: HybridAgent, episodes: int = 200):
     rewards_str = ",".join(f"{r:.2f}" for r in step_rewards) if step_rewards else "0.01"
     print(
         f"[END] success={'true' if success else 'false'} "
-        f"steps={step_num} rewards={rewards_str}",
+        f"steps={step_num} score={score:.3f} rewards={rewards_str}",
         flush=True
     )
 
