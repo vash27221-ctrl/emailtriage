@@ -49,9 +49,11 @@ client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 TASK_PROMPTS = {
     "task_1_easy": (
-        "You are an email classifier. Identify SPAM vs legitimate emails.\n"
-        "Obvious spam: phishing, generic offers, all-caps, suspicious domains.\n"
-        "Legitimate emails are: urgent, follow_up, or informational.\n"
+        "You are an email classifier. Classify emails into ONE category:\n"
+        "- spam: phishing, generic offers, all-caps subjects, suspicious domains, free money, viagra\n"
+        "- follow_up: needs your action or response — code reviews, budget approvals, customer requests, pull requests, anything awaiting your input\n"
+        "- informational: FYI only — meeting notes, announcements, status updates, team lunches, no action needed\n"
+        "- urgent: critical alerts, security incidents, immediate action required\n"
         "Return ONLY the category name."
     ),
     "task_2_medium": (
