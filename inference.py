@@ -101,7 +101,8 @@ def classify_with_llm(obs: Observation, task_id: str, max_retries: int = 3) -> E
             if "429" in str(e) and attempt < max_retries - 1:
                 time.sleep(10 * (attempt + 1))
                 continue
-            raise
+            # Any other exception: return safe default instead of crashing
+            return EmailCategory.INFORMATIONAL
 
     return EmailCategory.INFORMATIONAL
 
@@ -260,47 +261,45 @@ class HybridAgent:
 def run_task(task_id: str, agent: HybridAgent, episodes: int = 200):
     """Train agent then run one evaluation episode with required output format."""
 
-    # Train silently
-    agent.train(task_id=task_id, episodes=episodes)
-
-    # Evaluation episode
-    agent.epsilon = 0.0  # greedy
-
-    env  = EmailTriageEnv(task_id=task_id)
-    obs  = env.reset()
-    done = False
-
     step_rewards = []
     step_num     = 0
     success      = False
     last_error   = None
 
-    # [START] line
+    # [START] must be the first thing printed — before training
     print(f"[START] task={task_id} env=email-triage model={MODEL_NAME}", flush=True)
 
     try:
+        # Train silently (any exception here is caught below)
+        agent.train(task_id=task_id, episodes=episodes)
+
+        # Evaluation episode — greedy
+        agent.epsilon = 0.0
+
+        env  = EmailTriageEnv(task_id=task_id)
+        obs  = env.reset()
+        done = False
+
         while not done:
             step_num += 1
             category = agent.act(obs, task_id)
             action   = Action(action_type=ActionType.CLASSIFY,
                               category=category, reason="eval")
-            prev_obs = obs
             obs, reward, done, info = env.step(action)
 
             step_rewards.append(reward.step_reward)
             action_str = f"classify('{category.value}')"
             done_str   = "true" if done else "false"
-            error_str  = str(last_error) if last_error else "null"
 
             # [STEP] line
             print(
                 f"[STEP] step={step_num} action={action_str} "
-                f"reward={reward.step_reward:.2f} done={done_str} error={error_str}",
+                f"reward={reward.step_reward:.2f} done={done_str} error=null",
                 flush=True
             )
 
         grade   = env.task.grade()
-        success = grade >= 0.6  # passing threshold
+        success = grade >= 0.6
 
     except Exception as e:
         last_error = e
@@ -311,8 +310,8 @@ def run_task(task_id: str, agent: HybridAgent, episodes: int = 200):
             flush=True
         )
 
-    # [END] line
-    rewards_str = ",".join(f"{r:.2f}" for r in step_rewards)
+    # [END] always emitted
+    rewards_str = ",".join(f"{r:.2f}" for r in step_rewards) if step_rewards else "0.00"
     print(
         f"[END] success={'true' if success else 'false'} "
         f"steps={step_num} rewards={rewards_str}",
