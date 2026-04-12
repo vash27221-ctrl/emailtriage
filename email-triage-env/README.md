@@ -66,15 +66,15 @@ Combines Q-learning with Groq LLM:
 - Q-table pre-seeded with Groq labels before training
 - During training: explores randomly → uses Q-table when confident → falls back to Groq when uncertain
 - Groq answers are used to update Q-table (agent learns from LLM guidance)
-- Over 200 episodes, LLM calls drop to ~1-5% as Q-table matures
+- Over 50 episodes, LLM calls drop to ~1-5% as Q-table matures
 
 Results:
-| Task | Accuracy | Grade |
+| Task | Accuracy | Score |
 |------|----------|-------|
-| task_1_easy | 90.91% | 1.00/1.0 |
-| task_2_medium | 100% | 1.00/1.0 |
-| task_3_hard | 90% | 1.00/1.0 |
-| **Average** | | **1.00/1.0** |
+| task_1_easy | 100% | 0.990 |
+| task_2_medium | 100% | 0.990 |
+| task_3_hard | 100% | 0.990 |
+| **Average** | | **0.990** |
 
 ### Groq Baseline (`scripts/baseline_inference.py`)
 
@@ -118,9 +118,9 @@ obs.hint  # task-specific hint
 ### Reward
 
 ```python
-reward.step_reward       # 1.0 correct, 0.0 wrong
-reward.cumulative_reward # running accuracy
-reward.accuracy          # correct / total
+reward.step_reward       # 0.99 correct, 0.01 wrong
+reward.cumulative_reward # running accuracy (clamped 0.01-0.99)
+reward.accuracy          # correct / total (clamped 0.01-0.99)
 ```
 
 ---
@@ -132,16 +132,16 @@ Binary: spam vs legitimate. 5 spam + 6 legitimate emails.
 
 | Accuracy | Grade |
 |----------|-------|
-| ≥ 90% | 1.0 |
+| ≥ 90% | 0.99 |
 | 70–89% | 0.6 |
-| < 70% | 0.0 |
+| < 70% | 0.01 |
 
 ### Task 2 — Multi-Category (Medium)
 4-way: urgent / follow_up / informational / spam. 12 emails.
 
 | Accuracy | Grade |
 |----------|-------|
-| ≥ 85% | 1.0 |
+| ≥ 85% | 0.99 |
 | 70–84% | 0.75 |
 | 60–69% | 0.5 |
 | < 60% | 0.25 |
@@ -151,11 +151,11 @@ Binary: spam vs legitimate. 5 spam + 6 legitimate emails.
 
 | Accuracy | Grade |
 |----------|-------|
-| ≥ 90% | 1.0 |
+| ≥ 90% | 0.99 |
 | 80–89% | 0.8 |
 | 70–79% | 0.6 |
 | 60–69% | 0.3 |
-| < 60% | 0.0 |
+| < 60% | 0.01 |
 
 ---
 
@@ -198,7 +198,7 @@ class MyTask(Task):
 
     def grade(self) -> float:
         accuracy = self.correct_count / self.total_processed
-        return 1.0 if accuracy >= 0.9 else 0.0
+        return 0.99 if accuracy >= 0.9 else 0.01
 ```
 
 2. Register in `email_triage/tasks/__init__.py`:
