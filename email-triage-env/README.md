@@ -35,21 +35,28 @@ Three difficulty levels: easy → medium → hard.
 pip install -r requirements.txt
 ```
 
-### 2. Set your Groq API key
+### 2. Set your API key
 
 Create a `.env` file in the project root:
 
 ```
 GROQ_API_KEY=your_key_here
+HF_TOKEN=your_key_here
 ```
 
-### 3. Run the hybrid RL+LLM agent
+### 3. Run the hackathon submission agent
+
+```bash
+python3 ../inference.py
+```
+
+### 4. Run the standalone RL+LLM agent
 
 ```bash
 python scripts/rl_agent.py
 ```
 
-### 4. Run the Groq baseline only
+### 5. Run the Groq baseline only
 
 ```bash
 python scripts/baseline_inference.py
